@@ -1,0 +1,4 @@
+Hevily inspired by locking at acl-ruby c file, but using ffi/nice-ffi
+instead. 
+
+Same lisence. 
