@@ -258,23 +258,5 @@ end
 
 
 
-x=LibACL::acl_from_text("user::rwx\nuser:xa:rw")
-puts "Class: #{x.class} is valid? #{x.valid?}"
-
-
-#z=ACL::ACL.new(x)
-
-#puts x.methods
-puts "Using instance method:"
-x.each do |entry|
-	puts "<each> Entry: #{entry}"
-	puts "<each..> Tag_type: #{entry.tag_type}"
-  puts "<each..> Qualifier: #{entry.qualifier}"
-  puts "<each..> Permset: #{entry.permset}"
-end	
-puts "Acl to text: #{x.to_text}\n\n"
-
-f= LibACL::ACL.from_file("/archive/files")
-puts "/archive/files: \n#{f.to_text}"
 
 
