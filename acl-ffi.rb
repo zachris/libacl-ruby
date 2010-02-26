@@ -16,75 +16,91 @@ include Test::Unit::Assertions
 #typedef struct __acl_permset_ext *acl_permset_t; 
 
 
-#FFI Posix ACL (tested on linux)
+#FFI Posix ACL tested on linux and definitely not working on darwin.
 module LibACL
   extend NiceFFI::Library
-  ffi_lib 'libacl'
+  #ffi_lib 'libacl'
 
 
 	if FFI::Platform::IS_LINUX
-	
+    ffi_lib 'libacl'
 
-  # === Constants ===
-  #23.2.2 acl_perm_t values
-  enum :acl_perm, [
-    :read, 0x04,
-    :write, 0x02,
-    :execute, 0x01]
+    # === Constants ===
+    #23.2.2 acl_perm_t values
+    enum :acl_perm, [
+      :read, 0x04,
+      :write, 0x02,
+      :execute, 0x01]
 
 
-  #23.2.5 acl_tag_t values
-  enum :acl_tag, [
-    :undefined_tag, 0x00,
-    :user_obj, 0x01, #regular owner
-    :user, 0x02,
-    :group_obj, 0x04,
-    :group, 0x08,
-    :mask, 0x10,
-    :other, 0x20]
+    #23.2.5 acl_tag_t values
+    enum :acl_tag, [
+      :undefined_tag, 0x00,
+      :user_obj, 0x01, #regular owner
+      :user, 0x02,
+      :group_obj, 0x04,
+      :group, 0x08,
+      :mask, 0x10,
+      :other, 0x20]
 
   
 
-  #23.3.6 acl_type_t values */
-  enum :acl_type, [
-    :access, 0x8000,
-    :default, 0x4000]
+    #23.3.6 acl_type_t values */
+    enum :acl_type, [
+      :access, 0x8000,
+      :default, 0x4000]
 
 
-  #23.2.7 ACL qualifier constants */
-  #type :id_t
-  ACL_UNDEFINED_ID	= -1
+    #23.2.7 ACL qualifier constants */
+    #type :id_t
+    ACL_UNDEFINED_ID	= -1
 
 
-  #23.2.8 ACL Entry Constants */
-  enum :acl_entry, [
-    :first_entry,0,
-    :next_entry,1]
+    #23.2.8 ACL Entry Constants */
+    enum :acl_entry, [
+      :first_entry,0,
+      :next_entry,1]
 	
 	end #is linux
 
+	  	  		  		  		  		  		  		  		  		  		  		  		  		  		  	  	  			  			  			  			  			  			  	  	  			  			    
 
   class ACL < NiceFFI::OpaqueStruct
+  	include Enumerable
+  #Create struct capable of holding num entries
+  def self.init(num=10)
+    LibACL::acl_init(num)
+  end
 
     def self.release(ptr)
       acl_free(ptr)
     end
 
-
+    #Construct from file, using mode :access or :default
     def self.from_file(path, mode=:access)
       LibACL::acl_get_file(path,mode)
     end
-	
-	def self.from_text(text)
+    
+    def self.default(dir)
+      assert File.directory? dir
+      self.from_file(dir,:default)
+    end
+
+    #Construct from text
+    def self.from_text(text)
       LibACL::acl_from_text(text)
     end
 
-
-    def valid?
-      LibACL::acl_valid(self)!=0
+    #Create a copy of acl. 
+    def clone
+      LibACL::acl_dup(self)
     end
 
-    #memory handling of returned strings?
+    def valid?
+      LibACL::acl_valid(self)==0
+    end
+
+
     def to_text
       LibACL::acl_to_text(self, nil)
     end
@@ -105,11 +121,18 @@ module LibACL
 
     
     def create_entry
-      ptr = FFI::MemoryPointer.new :pointer
-      ret= LibACL::acl_create_entry(self, ptr )
+      entry_p = FFI::MemoryPointer.new :pointer
+      #acl_p = self.pointer
+      ret= LibACL::acl_create_entry(self, entry_p )
       raise "Can't create entry" if ret == -1
 
-      Entry.new ptr.read_pointer
+      
+      #test this case...
+#      #in case of reallocation
+#      if acl_p.pointer.address != self.pointer.address
+#        self.pointer=acl_p
+#      end
+      Entry.new entry_p.read_pointer
     end
 
     #I'm unsure of how memory is handled in this case
@@ -123,7 +146,7 @@ module LibACL
     def each(&blk)
       ptr = FFI::MemoryPointer.new :pointer
       having = LibACL::acl_get_entry(self, :first_entry, ptr)
-      while having>0
+      while (having>0)
         entry=Entry.new ptr.read_pointer
         blk.call entry
         having = LibACL::acl_get_entry(self, :next_entry, ptr)
@@ -132,6 +155,30 @@ module LibACL
       raise "Error getting entry" if having == -1
     end
 
+    #methods using each implementation
+
+    def user_obj
+      entry_find :user_obj
+    end
+
+    def group_obj
+      entry_find :group_obj
+    end
+
+    def other
+      entry_find :other
+    end
+
+    def mask
+      entry_find :mask
+    end
+
+
+    def entry_find(tag)
+      find do |entry| 	
+        entry.tag_type==tag
+      end
+    end
 
   end
 
@@ -139,13 +186,13 @@ module LibACL
 
   #This class only lives inside an ACL so I assume the ACL handles it's lifecycle. 
   class Entry < NiceFFI::OpaqueStruct
-#    def self.release(ptr)
-#      acl_free(ptr)
-#    end
+    #    def self.release(ptr)
+    #      acl_free(ptr)
+    #    end
 
-    #replace this entry with other
-    def replace_with(other)
-      LibACL::acl_copy_entry(self,other)
+    #replace this entry with source
+    def replace(source)
+      LibACL::acl_copy_entry(self,source)
     end
 
 
@@ -153,12 +200,12 @@ module LibACL
       ptr = FFI::MemoryPointer.new :pointer
       ret = LibACL::acl_get_permset(self, ptr)
       raise "Error" if ret!=0
-		Permset.new ptr.read_pointer
+      Permset.new ptr.read_pointer
     end
 
-#    def permset=
-#
-#    end
+    #    def permset=
+    #
+    #    end
 
     def tag_type
       type= LibACL::find_type(:acl_tag)
@@ -171,11 +218,12 @@ module LibACL
     def qualifier
       ptr = LibACL::acl_get_qualifier(self)
       if ptr.null?
-       return nil
+        return nil
       else 
       	return ptr.read_int
       end
     end
+
 
 
   end
@@ -183,41 +231,41 @@ module LibACL
   class Permset<NiceFFI::OpaqueStruct
     @@perm_t=LibACL::find_type(:acl_perm)
   
-	def clear
-		LibACL::acl_clear_perms(self)
-	end
+    def clear
+      LibACL::acl_clear_perms(self)
+    end
 	
-	def add(perm)
-		LibACL::acl_add_perm(self,@@perm_t[perm])
-	end
+    def add(perm)
+      LibACL::acl_add_perm(self,@@perm_t[perm])
+    end
 	
-	def delete(perm)
-		LibACL::acl_delete_perm(self,@@perm_t[perm])
-	end
+    def delete(perm)
+      LibACL::acl_delete_perm(self,@@perm_t[perm])
+    end
 	
-	def is_set?(perm)
-		LibACL::acl_get_perm(self, @@perm_t[perm]) >0
-	end
+    def is_set?(perm)
+      LibACL::acl_get_perm(self, @@perm_t[perm]) >0
+    end
 	
-	def read?
-		is_set? :read
-	end
+    def read?
+      is_set? :read
+    end
 	
-	def write?
-		is_set? :write
-	end
+    def write?
+      is_set? :write
+    end
 	
-	def execute?
-		is_set? :execute
-	end
+    def execute?
+      is_set? :execute
+    end
 	
-	def to_s
-		ret=""
-		 read? ? ret << "r" : ret << "-"
-		 write? ? ret << "w" : ret << "-"
-		 execute? ? ret << "x" : ret << "-"
-		ret
-	end
+    def to_s
+      ret=""
+      read? ? ret << "r" : ret << "-"
+      write? ? ret << "w" : ret << "-"
+      execute? ? ret << "x" : ret << "-"
+      ret
+    end
   
   end
 
@@ -261,12 +309,13 @@ module LibACL
   #  extern int acl_get_permset(acl_entry_t entry_d, acl_permset_t *permset_p);
   attach_function 'acl_get_permset', [:pointer,:pointer],:int
   #  extern int acl_set_permset(acl_entry_t entry_d, acl_permset_t permset_d);
+
   
   #on linux
   if FFI::Platform::IS_LINUX
-	attach_function 'acl_get_perm',[:pointer,:acl_perm],:int
+    attach_function 'acl_get_perm',[:pointer,:acl_perm],:int
   elsif FFI::Platform::IS_BSD
-	attach_function 'acl_get_perm_np',:acl_get_perm,[:pointer,:acl_perm],:int
+    attach_function 'acl_get_perm',:acl_get_perm_np,[:pointer,:acl_perm],:int
 	end
   #on bsd/osx
   #attach_function 'acl_get_perm_np',[:pointer,:pointer],:int
