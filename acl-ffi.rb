@@ -1,6 +1,5 @@
 require 'rubygems'
 gem 'ffi', '>= 0.5.0'
-gem 'nice-ffi','>=0.3.0'
 require 'ffi'
 require 'nice-ffi'
 require 'test/unit/assertions'
@@ -70,6 +69,10 @@ module LibACL
     def self.from_file(path, mode=:access)
       LibACL::acl_get_file(path,mode)
     end
+	
+	def self.from_text(text)
+      LibACL::acl_from_text(text)
+    end
 
 
     def valid?
@@ -129,16 +132,13 @@ module LibACL
 
 
 
-  #This class only lives inside an ACL, and the ACL handles it's lifecycle. 
+  #This class only lives inside an ACL so I assume the ACL handles it's lifecycle. 
   class Entry < NiceFFI::OpaqueStruct
-    #I think the ACL handles memory allocation/deallocation...
-    
 #    def self.release(ptr)
 #      acl_free(ptr)
 #    end
 
     #replace this entry with other
-    #that is - copy everything in other to this
     def replace_with(other)
       LibACL::acl_copy_entry(self,other)
     end
@@ -148,7 +148,7 @@ module LibACL
       ptr = FFI::MemoryPointer.new :pointer
       ret = LibACL::acl_get_permset(self, ptr)
       raise "Error" if ret!=0
-      Permset.new ptr.read_pointer
+		Permset.new ptr.read_pointer
     end
 
 #    def permset=
@@ -174,11 +174,55 @@ module LibACL
 
 
   end
-
+  
   class Permset<NiceFFI::OpaqueStruct
+    @@perm_t=LibACL::find_type(:acl_perm)
+  
+	def clear
+		LibACL::acl_clear_perms(self)
+	end
+	
+	def add(perm)
+		assert perm.class == @@perm_t.class
+		LibACL::acl_add_perm(self,perm)
+	end
+	
+	def delete(perm)
+		assert perm.class == @@perm_t.class
+		LibACL::acl_delete_perm(self,perm)
+	end
+	
+	#this is quite something, bit manipulaiton on an OpaqueStruct... 
+	#but it works
+	def to_i
+		self.pointer.read_int
+	end
+	
+	def read?
+		to_i & @@perm_t[:read] >0
+	end
+	
+	def write?
+		to_i & @@perm_t[:write] >0
+	end
+	
+	def execute?
+		to_i & @@perm_t[:execute]>0
+	end
+	
+	
 
-    
+	def to_s
+		ret=""
+		 read? ? ret << "r" : ret << "-"
+		 write? ? ret << "w" : ret << "-"
+		 execute? ? ret << "x" : ret << "-"
+		ret
+	end
+  
   end
+
+
 
 
 
@@ -206,15 +250,22 @@ module LibACL
   #Manipulate ACL entry permissions */
 
   #  extern int acl_add_perm(acl_permset_t permset_d, acl_perm_t perm);
+  attach_function 'acl_add_perm',[:pointer,:acl_perm],:int
+  
   #  extern int acl_calc_mask(acl_t *acl_p);
   #  extern int acl_clear_perms(acl_permset_t permset_d);
+  attach_function 'acl_clear_perms',[:pointer],:int
+  
   #  extern int acl_delete_perm(acl_permset_t permset_d, acl_perm_t perm);
+  attach_function 'acl_delete_perm',[:pointer, :acl_perm],:int
+  
   #  extern int acl_get_permset(acl_entry_t entry_d, acl_permset_t *permset_p);
   attach_function 'acl_get_permset', [:pointer,:pointer],:int
   #  extern int acl_set_permset(acl_entry_t entry_d, acl_permset_t permset_d);
-  #
+  
+  
+  
   #  #Manipulate ACL entry tag type and qualifier */
-  #
   #  extern void * acl_get_qualifier(acl_entry_t entry_d);
   attach_function 'acl_get_qualifier',[:pointer],:pointer
   #  extern int acl_get_tag_type(acl_entry_t entry_d, acl_tag_t *tag_type_p);
