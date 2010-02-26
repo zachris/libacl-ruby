@@ -13,7 +13,7 @@ include Test::Unit::Assertions
 #
 #typedef struct __acl_ext	*acl_t;
 #typedef struct __acl_entry_ext	*acl_entry_t;
-#typedef struct __acl_permset_ext *acl_permset_t;
+#typedef struct __acl_permset_ext *acl_permset_t; 
 
 
 #FFI Posix ACL (tested on linux)
@@ -21,6 +21,9 @@ module LibACL
   extend NiceFFI::Library
   ffi_lib 'libacl'
 
+
+	if FFI::Platform::IS_LINUX
+	
 
   # === Constants ===
   #23.2.2 acl_perm_t values
@@ -57,6 +60,8 @@ module LibACL
   enum :acl_entry, [
     :first_entry,0,
     :next_entry,1]
+	
+	end #is linux
 
 
   class ACL < NiceFFI::OpaqueStruct
@@ -183,35 +188,29 @@ module LibACL
 	end
 	
 	def add(perm)
-		assert perm.class == @@perm_t.class
-		LibACL::acl_add_perm(self,perm)
+		LibACL::acl_add_perm(self,@@perm_t[perm])
 	end
 	
 	def delete(perm)
-		assert perm.class == @@perm_t.class
-		LibACL::acl_delete_perm(self,perm)
+		LibACL::acl_delete_perm(self,@@perm_t[perm])
 	end
 	
-	#this is quite something, bit manipulaiton on an OpaqueStruct... 
-	#but it works
-	def to_i
-		self.pointer.read_int
+	def is_set?(perm)
+		LibACL::acl_get_perm(self, @@perm_t[perm]) >0
 	end
 	
 	def read?
-		to_i & @@perm_t[:read] >0
+		is_set? :read
 	end
 	
 	def write?
-		to_i & @@perm_t[:write] >0
+		is_set? :write
 	end
 	
 	def execute?
-		to_i & @@perm_t[:execute]>0
+		is_set? :execute
 	end
 	
-	
-
 	def to_s
 		ret=""
 		 read? ? ret << "r" : ret << "-"
@@ -263,6 +262,14 @@ module LibACL
   attach_function 'acl_get_permset', [:pointer,:pointer],:int
   #  extern int acl_set_permset(acl_entry_t entry_d, acl_permset_t permset_d);
   
+  #on linux
+  if FFI::Platform::IS_LINUX
+	attach_function 'acl_get_perm',[:pointer,:acl_perm],:int
+  elsif FFI::Platform::IS_BSD
+	attach_function 'acl_get_perm_np',:acl_get_perm,[:pointer,:acl_perm],:int
+	end
+  #on bsd/osx
+  #attach_function 'acl_get_perm_np',[:pointer,:pointer],:int
   
   
   #  #Manipulate ACL entry tag type and qualifier */
