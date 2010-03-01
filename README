@@ -2,15 +2,15 @@ An implementation of linux ACL (posix1e).
 Provides more convenience than ruby-acl, and uses FFI so it requires no
 extra compilation of c files, and works with jruby. 
 
+License:Ruby's GPL compatible dual license 
 
-first install ffi/nice-ffi: 
-gem install ffi nice-ffi
 
-Then download the file 'acl-ffi.rb' and load it: 
-require 'acl-ffi.rb'
+Install ffi/nice-ffi and libacl
+gem install ffi nice-ffi libacl
+
 
 Usage example:
-require 'acl-ffi.rb'
+require 'libacl'
 require 'test/unit/assertions'
 include Test::Unit::Assertions
 require 'fileutils'
