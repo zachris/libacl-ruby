@@ -184,11 +184,10 @@ module LibACL
 
 
 
-  #This class only lives inside an ACL so I assume the ACL handles it's lifecycle. 
   class Entry < NiceFFI::OpaqueStruct
-    #    def self.release(ptr)
-    #      acl_free(ptr)
-    #    end
+        def self.release(ptr)
+          acl_free(ptr)
+        end
 
     #replace this entry with source
     def replace(source)
@@ -203,9 +202,9 @@ module LibACL
       Permset.new ptr.read_pointer
     end
 
-    #    def permset=
+    #def permset=
     #
-    #    end
+    #end
 
     def tag_type
       type= LibACL::find_type(:acl_tag)
@@ -224,7 +223,16 @@ module LibACL
       end
     end
 
-
+    def == (other)
+      permset == other.permset and
+        tag_type == other.tag_type and
+        qualifier == other.qualifier
+    end
+    
+    def to_s
+     # tag=tag_type.to_s.sub("_obj","")
+      "#{tag_type}:#{qualifier}:#{permset}"
+    end
 
   end
   
@@ -246,7 +254,17 @@ module LibACL
     def is_set?(perm)
       LibACL::acl_get_perm(self, @@perm_t[perm]) >0
     end
+
+    #a linux hack/shortcut
+    def to_i
+      pointer.read_int
+    end
 	
+    def == (other)
+      to_i == other.to_i
+    end
+
+
     def read?
       is_set? :read
     end

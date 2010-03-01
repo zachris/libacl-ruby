@@ -1,4 +1,66 @@
-Hevily inspired by locking at acl-ruby c file, but using ffi/nice-ffi
-instead. 
+An implementation of linux ACL (posix1e). 
+Provides more convenience than ruby-acl, and uses FFI so it requires no
+extra compilation of c files, and works with jruby. 
 
-Same lisence. 
+
+first install ffi/nice-ffi: 
+gem install ffi nice-ffi
+
+Then download the file 'acl-ffi.rb' and load it: 
+require 'acl-ffi.rb'
+
+Usage example:
+require 'acl-ffi.rb'
+require 'test/unit/assertions'
+include Test::Unit::Assertions
+require 'fileutils'
+include FileUtils
+
+acl= LibACL::ACL.from_text 'user::rwx
+                            group::rx
+                            other::---
+                            mask::rwx
+                            user:root:rwx
+                            group:daemon:rx'
+assert acl.valid?
+
+
+acl_invalid= LibACL::ACL.from_text '
+                            user:nonexiestent_user:---
+                            group:does_not_exist:rx
+                            garbage_entry:user:::*:xyz'
+assert !acl_invalid.valid?
+
+
+#You can write ACL's to and read from directories and files
+touch '/tmp/foo'
+mkdir '/tmp/dir' unless File.exist? '/tmp/dir'
+
+acl.set_file '/tmp/foo'
+acl.set_default '/tmp/dir'
+
+acl_foo = LibACL::ACL.from_file '/tmp/foo'
+acl_def = LibACL::ACL.default '/tmp/dir'
+
+assert_equal acl_foo.to_text, acl.to_text
+assert_equal acl_def.to_text, acl.to_text
+
+
+#Operate on each entry
+p "Each entry in acl_foo:"
+acl_foo.each do |entry|
+  puts entry
+end
+
+
+#You can query the acl and get a text representation
+assert_equal acl_foo.user_obj.permset.to_s, 'rwx'
+assert_equal acl_foo.other.permset.to_s, "---"
+
+
+#Find works as expected, and convenience methods exist
+found = acl_foo.find do |entry|
+  entry.tag_type == :mask
+end
+
+assert found == acl_foo.mask
